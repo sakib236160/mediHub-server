@@ -50,7 +50,7 @@ async function run() {
   try {
     const db = client.db("mediHub");
     const usersCollection = db.collection("users");
-    const hubsCollection = db.collection("camps")
+    const campsCollection = db.collection("camps");
     // save or update a user in db
     app.post("/users/:email", async (req, res) => {
       const email = req.params.email;
@@ -97,10 +97,10 @@ async function run() {
       }
     });
 
-    // save a hubs data in db
+    // save a camp data in db
     app.post('/camps', verifyToken, async(req,res)=>{
-      const hub = req.body
-      const result = await hubsCollection.insertOne(hub)
+      const camp = req.body
+      const result = await campsCollection.insertOne(camp)
       res.send(result) 
     })
 

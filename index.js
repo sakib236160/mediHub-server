@@ -50,6 +50,7 @@ async function run() {
   try {
     const db = client.db("mediHub");
     const usersCollection = db.collection("users");
+    const hubsCollection = db.collection("camps")
     // save or update a user in db
     app.post("/users/:email", async (req, res) => {
       const email = req.params.email;
@@ -62,6 +63,7 @@ async function run() {
       }
       const result = await usersCollection.insertOne({
         ...user,
+        role: 'customer',
         timestamp: Date.now(),
       });
       res.send(result);
@@ -94,6 +96,13 @@ async function run() {
         res.status(500).send(err);
       }
     });
+
+    // save a hubs data in db
+    app.post('/camps', verifyToken, async(req,res)=>{
+      const hub = req.body
+      const result = await hubsCollection.insertOne(hub)
+      res.send(result) 
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

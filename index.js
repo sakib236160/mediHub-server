@@ -51,6 +51,7 @@ async function run() {
     const db = client.db("mediHub");
     const usersCollection = db.collection("users");
     const campsCollection = db.collection("camps");
+    const ordersCollection = db.collection("orders");
     // save or update a user in db
     app.post("/users/:email", async (req, res) => {
       const email = req.params.email;
@@ -118,6 +119,25 @@ async function run() {
       res.send(result);
     })
 
+    // save camp order data db
+    app.post('/order', verifyToken, async(req,res)=>{
+      const orderInfo = req.body
+      console.log(orderInfo);
+      const result = await ordersCollection.insertOne(orderInfo)
+      res.send(result) 
+    })
+
+    //manage camp Participant
+    app.patch('/camps/participant/:id', verifyToken, async(req,res)=>{
+      const id =req.params.id
+      const {participantToUpdate} = req.body
+      const filter = {_id: new ObjectId(id)}
+      let updateDoc = {
+        $inc:{participant: -participantToUpdate},
+      }
+      const result = await campsCollection.updateOne(filter,updateDoc)
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

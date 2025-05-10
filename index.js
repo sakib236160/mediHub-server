@@ -104,6 +104,21 @@ async function run() {
       res.send(result) 
     })
 
+    // get all camps form db
+    app.get('/camps', async(req,res)=>{
+      const result = await campsCollection.find().limit(15).toArray()
+      res.send(result) 
+    })
+
+    // get a camp by id
+    app.get('/camps/:id', async(req,res)=>{
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const result = await campsCollection.findOne(query)
+      res.send(result);
+    })
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(

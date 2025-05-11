@@ -130,13 +130,69 @@ async function run() {
     //manage camp Participant
     app.patch('/camps/participant/:id', verifyToken, async(req,res)=>{
       const id =req.params.id
-      const {participantToUpdate} = req.body
+      const {participantToUpdate, status} = req.body
       const filter = {_id: new ObjectId(id)}
       let updateDoc = {
         $inc:{participant: -participantToUpdate},
       }
+      if(status === 'increase'){
+        updateDoc = {
+        $inc:{participant: participantToUpdate},
+      }
+      }
       const result = await campsCollection.updateOne(filter,updateDoc)
       res.send(result);
+    })
+
+
+    // get all orders for a specific customer
+    app.get('/customer-orders/:email',verifyToken, async(req,res)=>{
+      const email = req.params.email
+      const query = {'customer.email':email}
+      const result = await ordersCollection.aggregate([
+        {
+          $match: query,
+        },
+        {
+          $addFields:{
+            campId:{$toObjectId: '$campId'},
+          },
+        },
+        {
+          $lookup:{
+            from: 'camps',
+            localField: 'campId',
+            foreignField: '_id',
+            as: 'camps',
+          },
+        },
+        {
+          $unwind: '$camps'
+        },
+        {
+          $addFields: {
+            name: '$camps.name',
+            image: '$camps.image',
+            participant: '$camps.participant',
+          }
+        },
+        {
+          $project: {
+            camps: 0,
+          }
+        },
+      ]).toArray()
+      res.send(result);
+    } )
+
+    // Cancle delete and camp
+    app.delete('/orders/:id',verifyToken, async(req,res)=>{
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const order = await ordersCollection.findOne(query)
+      if(order.status === 'Delivered') return res.status(409).send('Cannot cancle once the camp is delivered!')
+      const result = await ordersCollection.deleteOne(query)
+      res.send(result)
     })
 
     // Send a ping to confirm a successful connection

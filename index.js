@@ -62,6 +62,15 @@ async function run() {
       if(!result || result?.role !== 'admin') return res.status(403).send({message: 'ForbiddenAccess! Admin Only Action!'}) 
       next()
     }
+    // verify seller middleware
+    const verifySeller = async (req,res,next)=>{
+      // console.log('data for verifySeller middleware----->', req.user?.email)
+      const email = req.user?.email
+      const query = {email}
+      const result = await usersCollection.findOne(query)
+      if(!result || result?.role !== 'seller') return res.status(403).send({message: 'ForbiddenAccess! Seller Only Action!'}) 
+      next()
+    }
 
     // save or update a user in db
     app.post("/users/:email", async (req, res) => {
@@ -114,8 +123,23 @@ async function run() {
       res.send({role: result?.role})
     })
 
+    // get inventory data for seller
+    app.get('/camps/seller',verifyToken,verifySeller, async(req,res)=>{
+      const email =req.user.email
+      const result = await campsCollection.find({'seller.email':email}).toArray()
+      res.send(result)
+    })
+
+    // delete a camp from db by seller
+    app.delete('/camps/:id', verifyToken, verifySeller, async(req,res)=>{
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const result = await campsCollection.deleteOne(query)
+      res.send(result)
+    })
+
     // updata user role & status
-    app.patch('/user/role/:email',verifyToken, async(req,res)=>{
+    app.patch('/user/role/:email',verifyToken,verifyAdmin , async(req,res)=>{
       const email = req.params.email
       const {role} = req.body
       const filter = {email}
@@ -156,7 +180,7 @@ async function run() {
     });
 
     // save a camp data in db
-    app.post('/camps', verifyToken, async(req,res)=>{
+    app.post('/camps', verifyToken,verifySeller, async(req,res)=>{
       const camp = req.body
       const result = await campsCollection.insertOne(camp)
       res.send(result) 

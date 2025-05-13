@@ -380,6 +380,87 @@ async function run() {
       res.send(result)
     })
 
+
+
+
+// admin stat
+  app.get('/admin-stat', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const totalUser = await usersCollection.estimatedDocumentCount();
+    const totalCamps = await campsCollection.estimatedDocumentCount();
+
+    const allOrder = await ordersCollection.find().toArray();
+    const totalFees = allOrder.reduce((sum, order) => sum + (order.fees || 0), 0);
+
+    const chartData = await ordersCollection.aggregate([
+  {
+    $group: {
+      _id: {
+        $dateToString: {
+          format: '%Y-%m-%d',
+          date: { $toDate: '$_id' },
+        },
+      },
+      camp: { $sum: 1 },
+      fees: { $sum: '$fees' },
+      totalParticipant: { $sum: 1 }
+    },
+  },
+  {
+    $project: {
+      _id: 0,
+      date: '$_id',
+      camp: 1,
+      participant: '$totalParticipant',
+      fees: 1,
+    }
+  }
+]).toArray();
+    // Total Participants from all camps
+    const allCamps = await campsCollection.find().toArray();
+    const totalParticipants = allCamps.reduce((sum, camp) => sum + (camp.participant || 0), 0);
+
+    // Optional: breakdown of participants from orders per camp
+    const participantDetails = await ordersCollection.aggregate([
+      {
+        $group: {
+          _id: "$campId",
+          totalJoined: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: "camps",
+          localField: "_id",
+          foreignField: "_id",
+          as: "camp",
+        },
+      },
+      {
+        $unwind: "$camp",
+      },
+      {
+        $project: {
+          campName: "$camp.name",
+          totalJoined: 1,
+        },
+      },
+    ]).toArray();
+
+    res.send({
+      totalUser,
+      totalCamps,
+      totalFees,
+      totalParticipants,
+      participantDetails, // remove if not needed
+      chartData,
+    });
+  } catch (error) {
+    console.error("Admin stat error:", error);
+    res.status(500).send({ message: "Something went wrong!" });
+  }
+});
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(

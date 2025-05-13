@@ -224,8 +224,6 @@ async function run() {
       const result = await campsCollection.updateOne(filter,updateDoc)
       res.send(result);
     })
-
-
     // get all orders for a specific customer
     app.get('/customer-orders/:email',verifyToken, async(req,res)=>{
       const email = req.params.email
@@ -265,6 +263,58 @@ async function run() {
       ]).toArray()
       res.send(result);
     } )
+
+     // get all orders for a specific seller
+    app.get('/seller-orders/:email',verifyToken, verifySeller, async(req,res)=>{
+      const email = req.params.email
+      const query = {'seller':email}
+      const result = await ordersCollection.aggregate([
+        {
+          $match: query,
+        },
+        {
+          $addFields:{
+            campId:{$toObjectId: '$campId'},
+          },
+        },
+        {
+          $lookup:{
+            from: 'camps',
+            localField: 'campId',
+            foreignField: '_id',
+            as: 'camps',
+          },
+        },
+        {
+          $unwind: '$camps'
+        },
+        {
+          $addFields: {
+            name: '$camps.name',
+            participant: '$camps.participant',
+          }
+        },
+        {
+          $project: {
+            camps: 0,
+          }
+        },
+      ]).toArray()
+      res.send(result);
+    } )
+
+
+    // updata a order  status
+    app.patch('/orders/:id',verifyToken,verifySeller, async(req,res)=>{
+      const id = req.params.id
+      const {status} = req.body
+      const filter = {_id: new ObjectId(id)}
+      const updateDoc={
+        $set:{status},
+      }
+      const result = await ordersCollection.updateOne(filter,updateDoc)
+      res.send(result)
+    })
 
     // Cancle delete and camp
     app.delete('/orders/:id',verifyToken, async(req,res)=>{

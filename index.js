@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
+const nodemailer = require("nodemailer");
 
 const port = process.env.PORT || 9000;
 const app = express();
@@ -35,6 +36,45 @@ const verifyToken = async (req, res, next) => {
     next();
   });
 };
+
+// send email using nodemailer
+const sendEmail = (emailAddress,emailData)=>{
+  // create transporter
+  const transporter = nodemailer.createTransport({
+
+    host: "smtp.gmail.com",
+    port:587,
+    secure:false,
+    auth:{
+      user: process.env.NODEMAILER_USER,
+      pass: process.env.NODEMAILER_PASS,
+    },
+})
+// verify connection
+transporter.verify((error, success)=>{
+  if(error){
+    console.log(error);
+  }else{
+    console.log('Transporter is ready to emails.',success)
+  }
+})
+// transporter.sendMail()
+const mailBody = {
+  from: process.env.NODEMAILER_USER,
+  to: emailAddress,
+  subject: emailData?.subject,
+  html: `<p>${emailData?.message}</p>`,
+}
+// send email
+transporter.sendMail(mailBody,(error,info)=>{
+  if(error){
+    console.log(error)
+  }else{
+    // console.log(info)
+    console.log('Email Sent: ' + info?.response)
+  }
+})
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.k7k1l.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -74,6 +114,7 @@ async function run() {
 
     // save or update a user in db
     app.post("/users/:email", async (req, res) => {
+      sendEmail()
       const email = req.params.email;
       const query = { email };
       const user = req.body;
@@ -205,6 +246,19 @@ async function run() {
       const orderInfo = req.body
       console.log(orderInfo);
       const result = await ordersCollection.insertOne(orderInfo)
+      // send email
+      if(result?.insertedId){
+        // To Customer
+        sendEmail(orderInfo?.customer?.email,{
+          subject: 'Camp Successfully!',
+          message: `You've placed an Camp Successfully!. Transaction Id:${result?.insertedId}`
+        })
+        // To Seller
+        sendEmail(orderInfo?.seller,{
+          subject: 'Hurray!, You Have an Camp To Process',
+          message: `Get The Camps readt for ${orderInfo?.customer?.name}`
+        })
+      }
       res.send(result) 
     })
 

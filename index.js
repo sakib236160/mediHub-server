@@ -6,6 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
 const nodemailer = require("nodemailer");
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
 
 const port = process.env.PORT || 9000;
 const app = express();
@@ -38,43 +39,42 @@ const verifyToken = async (req, res, next) => {
 };
 
 // send email using nodemailer
-const sendEmail = (emailAddress,emailData)=>{
+const sendEmail = (emailAddress, emailData) => {
   // create transporter
   const transporter = nodemailer.createTransport({
-
     host: "smtp.gmail.com",
-    port:587,
-    secure:false,
-    auth:{
+    port: 587,
+    secure: false,
+    auth: {
       user: process.env.NODEMAILER_USER,
       pass: process.env.NODEMAILER_PASS,
     },
-})
-// verify connection
-transporter.verify((error, success)=>{
-  if(error){
-    console.log(error);
-  }else{
-    console.log('Transporter is ready to emails.',success)
-  }
-})
-// transporter.sendMail()
-const mailBody = {
-  from: process.env.NODEMAILER_USER,
-  to: emailAddress,
-  subject: emailData?.subject,
-  html: `<p>${emailData?.message}</p>`,
-}
-// send email
-transporter.sendMail(mailBody,(error,info)=>{
-  if(error){
-    console.log(error)
-  }else{
-    // console.log(info)
-    console.log('Email Sent: ' + info?.response)
-  }
-})
-}
+  });
+  // verify connection
+  transporter.verify((error, success) => {
+    if (error) {
+      console.log(error);
+    } else {
+      console.log("Transporter is ready to emails.", success);
+    }
+  });
+  // transporter.sendMail()
+  const mailBody = {
+    from: process.env.NODEMAILER_USER,
+    to: emailAddress,
+    subject: emailData?.subject,
+    html: `<p>${emailData?.message}</p>`,
+  };
+  // send email
+  transporter.sendMail(mailBody, (error, info) => {
+    if (error) {
+      console.log(error);
+    } else {
+      // console.log(info)
+      console.log("Email Sent: " + info?.response);
+    }
+  });
+};
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.k7k1l.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -94,27 +94,33 @@ async function run() {
     const ordersCollection = db.collection("orders");
 
     // verify admin middleware
-    const verifyAdmin = async (req,res,next)=>{
+    const verifyAdmin = async (req, res, next) => {
       // console.log('data for verifyAdmin middleware----->', req.user?.email)
-      const email = req.user?.email
-      const query = {email}
-      const result = await usersCollection.findOne(query)
-      if(!result || result?.role !== 'admin') return res.status(403).send({message: 'ForbiddenAccess! Admin Only Action!'}) 
-      next()
-    }
+      const email = req.user?.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== "admin")
+        return res
+          .status(403)
+          .send({ message: "ForbiddenAccess! Admin Only Action!" });
+      next();
+    };
     // verify seller middleware
-    const verifySeller = async (req,res,next)=>{
+    const verifySeller = async (req, res, next) => {
       // console.log('data for verifySeller middleware----->', req.user?.email)
-      const email = req.user?.email
-      const query = {email}
-      const result = await usersCollection.findOne(query)
-      if(!result || result?.role !== 'seller') return res.status(403).send({message: 'ForbiddenAccess! Seller Only Action!'}) 
-      next()
-    }
+      const email = req.user?.email;
+      const query = { email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== "seller")
+        return res
+          .status(403)
+          .send({ message: "ForbiddenAccess! Seller Only Action!" });
+      next();
+    };
 
     // save or update a user in db
     app.post("/users/:email", async (req, res) => {
-      sendEmail()
+      sendEmail();
       const email = req.params.email;
       const query = { email };
       const user = req.body;
@@ -125,71 +131,80 @@ async function run() {
       }
       const result = await usersCollection.insertOne({
         ...user,
-        role: 'customer',
+        role: "customer",
         timestamp: Date.now(),
       });
       res.send(result);
     });
 
     // manage user status and role
-    app.patch('/users/:email',verifyToken, async(req,res)=>{
-      const email =req.params.email
-      const query = {email}
-      const user = await usersCollection.findOne(query)
-      if(!user || user?.status === 'Requested') return res.status(400).send('You have Alrady Request, wait for some time')
+    app.patch("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user?.status === "Requested")
+        return res
+          .status(400)
+          .send("You have Alrady Request, wait for some time");
 
-      
       const updateDoc = {
-        $set:{
-          status: 'Requested',
+        $set: {
+          status: "Requested",
         },
-      }
-      const result = await usersCollection.updateOne(query, updateDoc)
+      };
+      const result = await usersCollection.updateOne(query, updateDoc);
       console.log(result);
-      res.send(result)
-    })
+      res.send(result);
+    });
 
     // get all user data
-    app.get('/all-users/:email',verifyToken, verifyAdmin, async(req,res)=>{
-      const email = req.params.email
-      const query = {email:{$ne: email}}
-      const result = await usersCollection.find(query).toArray()
+    app.get("/all-users/:email", verifyToken, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: { $ne: email } };
+      const result = await usersCollection.find(query).toArray();
       res.send(result);
-    })
+    });
 
     // get user role
-    app.get('/users/role/:email', async(req,res)=>{
-      const email = req.params.email
-      const result = await usersCollection.findOne({email})
-      res.send({role: result?.role})
-    })
+    app.get("/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await usersCollection.findOne({ email });
+      res.send({ role: result?.role });
+    });
 
     // get inventory data for seller
-    app.get('/camps/seller',verifyToken,verifySeller, async(req,res)=>{
-      const email =req.user.email
-      const result = await campsCollection.find({'seller.email':email}).toArray()
-      res.send(result)
-    })
+    app.get("/camps/seller", verifyToken, verifySeller, async (req, res) => {
+      const email = req.user.email;
+      const result = await campsCollection
+        .find({ "seller.email": email })
+        .toArray();
+      res.send(result);
+    });
 
     // delete a camp from db by seller
-    app.delete('/camps/:id', verifyToken, verifySeller, async(req,res)=>{
-      const id = req.params.id
-      const query = {_id: new ObjectId(id)}
-      const result = await campsCollection.deleteOne(query)
-      res.send(result)
-    })
+    app.delete("/camps/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await campsCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // updata user role & status
-    app.patch('/user/role/:email',verifyToken,verifyAdmin , async(req,res)=>{
-      const email = req.params.email
-      const {role} = req.body
-      const filter = {email}
-      const updateDoc={
-        $set:{role,status: 'Verified'},
+    app.patch(
+      "/user/role/:email",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.params.email;
+        const { role } = req.body;
+        const filter = { email };
+        const updateDoc = {
+          $set: { role, status: "Verified" },
+        };
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
       }
-      const result = await usersCollection.updateOne(filter,updateDoc)
-      res.send(result)
-    })
+    );
 
     // Generate jwt token
     app.post("/jwt", async (req, res) => {
@@ -221,245 +236,295 @@ async function run() {
     });
 
     // save a camp data in db
-    app.post('/camps', verifyToken,verifySeller, async(req,res)=>{
-      const camp = req.body
-      const result = await campsCollection.insertOne(camp)
-      res.send(result) 
-    })
+    app.post("/camps", verifyToken, verifySeller, async (req, res) => {
+      const camp = req.body;
+      const result = await campsCollection.insertOne(camp);
+      res.send(result);
+    });
 
     // get all camps form db
-    app.get('/camps', async(req,res)=>{
-      const result = await campsCollection.find().limit(15).toArray()
-      res.send(result) 
-    })
+    app.get("/camps", async (req, res) => {
+      const result = await campsCollection.find().limit(15).toArray();
+      res.send(result);
+    });
 
     // get a camp by id
-    app.get('/camps/:id', async(req,res)=>{
-      const id = req.params.id
-      const query = {_id: new ObjectId(id)}
-      const result = await campsCollection.findOne(query)
+    app.get("/camps/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await campsCollection.findOne(query);
       res.send(result);
-    })
+    });
 
     // save camp order data db
-    app.post('/order', verifyToken, async(req,res)=>{
-      const orderInfo = req.body
+    app.post("/order", verifyToken, async (req, res) => {
+      const orderInfo = req.body;
       console.log(orderInfo);
-      const result = await ordersCollection.insertOne(orderInfo)
+      const result = await ordersCollection.insertOne(orderInfo);
       // send email
-      if(result?.insertedId){
+      if (result?.insertedId) {
         // To Customer
-        sendEmail(orderInfo?.customer?.email,{
-          subject: 'Camp Successfully!',
-          message: `You've placed an Camp Successfully!. Transaction Id:${result?.insertedId}`
-        })
+        sendEmail(orderInfo?.customer?.email, {
+          subject: "Camp Successfully!",
+          message: `You've placed an Camp Successfully!. Transaction Id:${result?.insertedId}`,
+        });
         // To Seller
-        sendEmail(orderInfo?.seller,{
-          subject: 'Hurray!, You Have an Camp To Process',
-          message: `Get The Camps readt for ${orderInfo?.customer?.name}`
-        })
+        sendEmail(orderInfo?.seller, {
+          subject: "Hurray!, You Have an Camp To Process",
+          message: `Get The Camps readt for ${orderInfo?.customer?.name}`,
+        });
       }
-      res.send(result) 
-    })
+      res.send(result);
+    });
 
     //manage camp Participant
-    app.patch('/camps/participant/:id', verifyToken, async(req,res)=>{
-      const id =req.params.id
-      const {participantToUpdate, status} = req.body
-      const filter = {_id: new ObjectId(id)}
+    app.patch("/camps/participant/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const { participantToUpdate, status } = req.body;
+      const filter = { _id: new ObjectId(id) };
       let updateDoc = {
-        $inc:{participant: -participantToUpdate},
-      }
-      if(status === 'increase'){
+        $inc: { participant: -participantToUpdate },
+      };
+      if (status === "increase") {
         updateDoc = {
-        $inc:{participant: participantToUpdate},
+          $inc: { participant: participantToUpdate },
+        };
       }
-      }
-      const result = await campsCollection.updateOne(filter,updateDoc)
+      const result = await campsCollection.updateOne(filter, updateDoc);
       res.send(result);
-    })
+    });
     // get all orders for a specific customer
-    app.get('/customer-orders/:email',verifyToken, async(req,res)=>{
-      const email = req.params.email
-      const query = {'customer.email':email}
-      const result = await ordersCollection.aggregate([
-        {
-          $match: query,
-        },
-        {
-          $addFields:{
-            campId:{$toObjectId: '$campId'},
+    app.get("/customer-orders/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { "customer.email": email };
+      const result = await ordersCollection
+        .aggregate([
+          {
+            $match: query,
           },
-        },
-        {
-          $lookup:{
-            from: 'camps',
-            localField: 'campId',
-            foreignField: '_id',
-            as: 'camps',
+          {
+            $addFields: {
+              campId: { $toObjectId: "$campId" },
+            },
           },
-        },
-        {
-          $unwind: '$camps'
-        },
-        {
-          $addFields: {
-            name: '$camps.name',
-            image: '$camps.image',
-            participant: '$camps.participant',
-          }
-        },
-        {
-          $project: {
-            camps: 0,
-          }
-        },
-      ]).toArray()
+          {
+            $lookup: {
+              from: "camps",
+              localField: "campId",
+              foreignField: "_id",
+              as: "camps",
+            },
+          },
+          {
+            $unwind: "$camps",
+          },
+          {
+            $addFields: {
+              name: "$camps.name",
+              image: "$camps.image",
+              participant: "$camps.participant",
+            },
+          },
+          {
+            $project: {
+              camps: 0,
+            },
+          },
+        ])
+        .toArray();
       res.send(result);
-    } )
+    });
 
-     // get all orders for a specific seller
-    app.get('/seller-orders/:email',verifyToken, verifySeller, async(req,res)=>{
-      const email = req.params.email
-      const query = {'seller':email}
-      const result = await ordersCollection.aggregate([
-        {
-          $match: query,
-        },
-        {
-          $addFields:{
-            campId:{$toObjectId: '$campId'},
-          },
-        },
-        {
-          $lookup:{
-            from: 'camps',
-            localField: 'campId',
-            foreignField: '_id',
-            as: 'camps',
-          },
-        },
-        {
-          $unwind: '$camps'
-        },
-        {
-          $addFields: {
-            name: '$camps.name',
-            participant: '$camps.participant',
-          }
-        },
-        {
-          $project: {
-            camps: 0,
-          }
-        },
-      ]).toArray()
-      res.send(result);
-    } )
-
+    // get all orders for a specific seller
+    app.get(
+      "/seller-orders/:email",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { seller: email };
+        const result = await ordersCollection
+          .aggregate([
+            {
+              $match: query,
+            },
+            {
+              $addFields: {
+                campId: { $toObjectId: "$campId" },
+              },
+            },
+            {
+              $lookup: {
+                from: "camps",
+                localField: "campId",
+                foreignField: "_id",
+                as: "camps",
+              },
+            },
+            {
+              $unwind: "$camps",
+            },
+            {
+              $addFields: {
+                name: "$camps.name",
+                participant: "$camps.participant",
+              },
+            },
+            {
+              $project: {
+                camps: 0,
+              },
+            },
+          ])
+          .toArray();
+        res.send(result);
+      }
+    );
 
     // updata a order  status
-    app.patch('/orders/:id',verifyToken,verifySeller, async(req,res)=>{
-      const id = req.params.id
-      const {status} = req.body
-      const filter = {_id: new ObjectId(id)}
-      const updateDoc={
-        $set:{status},
-      }
-      const result = await ordersCollection.updateOne(filter,updateDoc)
-      res.send(result)
-    })
+    app.patch("/orders/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: { status },
+      };
+      const result = await ordersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
     // Cancle delete and camp
-    app.delete('/orders/:id',verifyToken, async(req,res)=>{
-      const id = req.params.id
-      const query = {_id: new ObjectId(id)}
-      const order = await ordersCollection.findOne(query)
-      if(order.status === 'Delivered') return res.status(409).send('Cannot cancle once the camp is delivered!')
-      const result = await ordersCollection.deleteOne(query)
-      res.send(result)
-    })
-
-
-
-
-// admin stat
-  app.get('/admin-stat', verifyToken, verifyAdmin, async (req, res) => {
-  try {
-    const totalUser = await usersCollection.estimatedDocumentCount();
-    const totalCamps = await campsCollection.estimatedDocumentCount();
-
-    const allOrder = await ordersCollection.find().toArray();
-    const totalFees = allOrder.reduce((sum, order) => sum + (order.fees || 0), 0);
-
-    const chartData = await ordersCollection.aggregate([
-  {
-    $group: {
-      _id: {
-        $dateToString: {
-          format: '%Y-%m-%d',
-          date: { $toDate: '$_id' },
-        },
-      },
-      camp: { $sum: 1 },
-      fees: { $sum: '$fees' },
-      totalParticipant: { $sum: 1 }
-    },
-  },
-  {
-    $project: {
-      _id: 0,
-      date: '$_id',
-      camp: 1,
-      participant: '$totalParticipant',
-      fees: 1,
-    }
-  }
-]).toArray();
-    // Total Participants from all camps
-    const allCamps = await campsCollection.find().toArray();
-    const totalParticipants = allCamps.reduce((sum, camp) => sum + (camp.participant || 0), 0);
-
-    // Optional: breakdown of participants from orders per camp
-    const participantDetails = await ordersCollection.aggregate([
-      {
-        $group: {
-          _id: "$campId",
-          totalJoined: { $sum: 1 },
-        },
-      },
-      {
-        $lookup: {
-          from: "camps",
-          localField: "_id",
-          foreignField: "_id",
-          as: "camp",
-        },
-      },
-      {
-        $unwind: "$camp",
-      },
-      {
-        $project: {
-          campName: "$camp.name",
-          totalJoined: 1,
-        },
-      },
-    ]).toArray();
-
-    res.send({
-      totalUser,
-      totalCamps,
-      totalFees,
-      totalParticipants,
-      participantDetails, // remove if not needed
-      chartData,
+    app.delete("/orders/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const order = await ordersCollection.findOne(query);
+      if (order.status === "Delivered")
+        return res
+          .status(409)
+          .send("Cannot cancle once the camp is delivered!");
+      const result = await ordersCollection.deleteOne(query);
+      res.send(result);
     });
-  } catch (error) {
-    console.error("Admin stat error:", error);
-    res.status(500).send({ message: "Something went wrong!" });
-  }
-});
+
+    // admin stat
+    app.get("/admin-stat", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const totalUser = await usersCollection.estimatedDocumentCount();
+        const totalCamps = await campsCollection.estimatedDocumentCount();
+
+        const allOrder = await ordersCollection.find().toArray();
+        const totalFees = allOrder.reduce(
+          (sum, order) => sum + (order.fees || 0),
+          0
+        );
+
+        const chartData = await ordersCollection
+          .aggregate([
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    format: "%Y-%m-%d",
+                    date: { $toDate: "$_id" },
+                  },
+                },
+                camp: { $sum: 1 },
+                fees: { $sum: "$fees" },
+                totalParticipant: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                date: "$_id",
+                camp: 1,
+                participant: "$totalParticipant",
+                fees: 1,
+              },
+            },
+          ])
+          .toArray();
+        // Total Participants from all camps
+        const allCamps = await campsCollection.find().toArray();
+        const totalParticipants = allCamps.reduce(
+          (sum, camp) => sum + (camp.participant || 0),
+          0
+        );
+
+        // Optional: breakdown of participants from orders per camp
+        const participantDetails = await ordersCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$campId",
+                totalJoined: { $sum: 1 },
+              },
+            },
+            {
+              $lookup: {
+                from: "camps",
+                localField: "_id",
+                foreignField: "_id",
+                as: "camp",
+              },
+            },
+            {
+              $unwind: "$camp",
+            },
+            {
+              $project: {
+                campName: "$camp.name",
+                totalJoined: 1,
+              },
+            },
+          ])
+          .toArray();
+
+        res.send({
+          totalUser,
+          totalCamps,
+          totalFees,
+          totalParticipants,
+          participantDetails, // remove if not needed
+          chartData,
+        });
+      } catch (error) {
+        console.error("Admin stat error:", error);
+        res.status(500).send({ message: "Something went wrong!" });
+      }
+    });
+
+    // create payment intent
+    app.post('/create-payment-intent', verifyToken, async(req,res)=>{
+      const {fees,campId} = req.body
+      const camp = await campsCollection.findOne({ _id: new ObjectId(campId)})
+      if(!camp){
+        return res.status(400).send({message: 'camp Not Found'})
+      }
+      const totalFees =( fees * camp.fees) * 100 //total fees in sent (poysa)
+      // res.send({totalFees})
+      // console.log(totalFees);
+
+      const {client_secret} = await stripe.paymentIntents.create({
+        amount:totalFees,
+        currency: 'usd',
+        automatic_payment_methods:{
+          enabled: true,
+        },
+      })
+      res.send({clientSecret:client_secret})
+    })
+    // // create payment intent
+    // app.post('/create-payment-intent', verifyToken, async(req,res)=>{
+    //   const {participant,campId} = req.body
+    //   const camp = await campsCollection.findOne({ _id: new ObjectId(campId)})
+    //   if(!camp){
+    //     return res.status(400).send({message: 'camp Not Found'})
+    //   }
+    //   const totalFees =( participant * camp.fees) * 100 //total fees in sent (poysa)
+    //   res.send({totalFees})
+    //   console.log(totalFees);
+    // })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

@@ -6,7 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
 const nodemailer = require("nodemailer");
-const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY);
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 
 const port = process.env.PORT || 9000;
 const app = express();
@@ -136,31 +136,18 @@ async function run() {
       });
       res.send(result);
     });
+    // update camps
+    app.put("/camps/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
 
+      const result = await campsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updatedData }
+      );
 
-
-
-
-
-
-    app.put('/camps/:id', async (req, res) => {
-  const id = req.params.id;
-  const updatedData = req.body;
-
-  const result = await campsCollection.updateOne(
-    { _id: new ObjectId(id) },
-    { $set: updatedData }
-  );
-
-  res.send(result);
-});
-
-
-
-
-
-
-
+      res.send(result);
+    });
 
     // manage user status and role
     app.patch("/users/:email", verifyToken, async (req, res) => {
@@ -520,24 +507,23 @@ async function run() {
     });
 
     // create payment intent
-    app.post('/create-payment-intent', verifyToken, async(req,res)=>{
-      const {fees,campId} = req.body
-      const camp = await campsCollection.findOne({ _id: new ObjectId(campId)})
-      if(!camp){
-        return res.status(400).send({message: 'camp Not Found'})
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
+      const { fees, campId } = req.body;
+      const camp = await campsCollection.findOne({ _id: new ObjectId(campId) });
+      if (!camp) {
+        return res.status(400).send({ message: "camp Not Found" });
       }
-      const totalFees =( fees * camp.fees) * 100 //total fees in sent (poysa)
+      const totalFees = fees * camp.fees * 100; //total fees in sent (poysa)
 
-      const {client_secret} = await stripe.paymentIntents.create({
-        amount:totalFees,
-        currency: 'usd',
-        automatic_payment_methods:{
+      const { client_secret } = await stripe.paymentIntents.create({
+        amount: totalFees,
+        currency: "usd",
+        automatic_payment_methods: {
           enabled: true,
         },
-      })
-      res.send({clientSecret:client_secret})
-    })
-
+      });
+      res.send({ clientSecret: client_secret });
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

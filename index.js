@@ -137,6 +137,31 @@ async function run() {
       res.send(result);
     });
 
+
+
+
+
+
+
+    app.put('/camps/:id', async (req, res) => {
+  const id = req.params.id;
+  const updatedData = req.body;
+
+  const result = await campsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updatedData }
+  );
+
+  res.send(result);
+});
+
+
+
+
+
+
+
+
     // manage user status and role
     app.patch("/users/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
@@ -244,7 +269,7 @@ async function run() {
 
     // get all camps form db
     app.get("/camps", async (req, res) => {
-      const result = await campsCollection.find().limit(15).toArray();
+      const result = await campsCollection.find().toArray();
       res.send(result);
     });
 
@@ -502,8 +527,6 @@ async function run() {
         return res.status(400).send({message: 'camp Not Found'})
       }
       const totalFees =( fees * camp.fees) * 100 //total fees in sent (poysa)
-      // res.send({totalFees})
-      // console.log(totalFees);
 
       const {client_secret} = await stripe.paymentIntents.create({
         amount:totalFees,
@@ -514,17 +537,7 @@ async function run() {
       })
       res.send({clientSecret:client_secret})
     })
-    // // create payment intent
-    // app.post('/create-payment-intent', verifyToken, async(req,res)=>{
-    //   const {participant,campId} = req.body
-    //   const camp = await campsCollection.findOne({ _id: new ObjectId(campId)})
-    //   if(!camp){
-    //     return res.status(400).send({message: 'camp Not Found'})
-    //   }
-    //   const totalFees =( participant * camp.fees) * 100 //total fees in sent (poysa)
-    //   res.send({totalFees})
-    //   console.log(totalFees);
-    // })
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

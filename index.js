@@ -92,6 +92,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const campsCollection = db.collection("camps");
     const ordersCollection = db.collection("orders");
+    const reviewsCollection = db.collection("reviews");
 
     // verify admin middleware
     const verifyAdmin = async (req, res, next) => {
@@ -524,6 +525,54 @@ async function run() {
       });
       res.send({ clientSecret: client_secret });
     });
+
+
+
+    // POST /reviews
+    app.post("/reviews", verifyToken, async (req, res) => {
+      try {
+        const reviewData = req.body;
+        const result = await reviewsCollection.insertOne({
+          ...reviewData,
+          createdAt: new Date(),
+        });
+        res.status(201).send({ insertedId: result.insertedId });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Failed to submit review" });
+      }
+    });
+
+    // GET /reviews/:campId
+    app.get("/reviews/:campId", async (req, res) => {
+      const campId = req.params.campId;
+      try {
+        const reviews = await reviewsCollection
+          .find({ campId })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(reviews);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Could not fetch reviews" });
+      }
+    });
+
+
+    // GET /reviews - get all reviews
+app.get("/reviews", async (req, res) => {
+  try {
+    const reviews = await reviewsCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.send(reviews);
+  } catch (err) {
+    console.error("Error fetching all reviews:", err);
+    res.status(500).send({ message: "Failed to fetch reviews" });
+  }
+});
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

@@ -11,12 +11,14 @@ const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 const port = process.env.PORT || 9000;
 const app = express();
 // middleware
-const corsOptions = {
-  origin: ["http://localhost:5173", "http://localhost:5174"],
-  credentials: true,
-  optionSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
+
+app.use(
+  cors({
+    origin: "https://medihub-6ef03.web.app",
+    credentials: true,
+  })
+);
+app.use(cookieParser());
 
 app.use(express.json());
 app.use(cookieParser());
@@ -106,6 +108,7 @@ async function run() {
           .send({ message: "ForbiddenAccess! Admin Only Action!" });
       next();
     };
+
     // verify seller middleware
     const verifySeller = async (req, res, next) => {
       // console.log('data for verifySeller middleware----->', req.user?.email)
@@ -236,18 +239,19 @@ async function run() {
     // Logout
     app.get("/logout", async (req, res) => {
       try {
+        res;
         res
           .clearCookie("token", {
-            maxAge: 0,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
           })
+          .status(200)
           .send({ success: true });
       } catch (err) {
-        res.status(500).send(err);
+        res.status(500).send({ success: false, error: err.message });
       }
     });
-
     // save a camp data in db
     app.post("/camps", verifyToken, verifySeller, async (req, res) => {
       const camp = req.body;
@@ -526,8 +530,6 @@ async function run() {
       res.send({ clientSecret: client_secret });
     });
 
-
-
     // POST /reviews
     app.post("/reviews", verifyToken, async (req, res) => {
       try {
@@ -558,27 +560,19 @@ async function run() {
       }
     });
 
-
     // GET /reviews - get all reviews
-app.get("/reviews", async (req, res) => {
-  try {
-    const reviews = await reviewsCollection
-      .find()
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.send(reviews);
-  } catch (err) {
-    console.error("Error fetching all reviews:", err);
-    res.status(500).send({ message: "Failed to fetch reviews" });
-  }
-});
-
-
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    app.get("/reviews", async (req, res) => {
+      try {
+        const reviews = await reviewsCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(reviews);
+      } catch (err) {
+        console.error("Error fetching all reviews:", err);
+        res.status(500).send({ message: "Failed to fetch reviews" });
+      }
+    });
   } finally {
     // Ensures that the client will close when you finish/error
   }
